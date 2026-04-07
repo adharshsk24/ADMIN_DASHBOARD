@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>REC Order Kiosk | SWIFT</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="kiosk_style.css">
+</head>
+<body>
+    <div class="kiosk-container">
+        <!-- Persistent Header -->
+        <header class="kiosk-header">
+            <div class="logo-area">
+                <img src="college_logo.png" alt="REC Logo" class="rec-logo" id="header-logo">
+                <div>
+                    <h2 style="font-weight: 800; letter-spacing: -1px; color: #5a2d82;">REC KIOSK</h2>
+                    <span class="swift-badge">POWERED BY SWIFT</span>
+                </div>
+            </div>
+            <div id="student-info" class="hidden" style="text-align: right;">
+                <div id="student-name" style="font-weight: 700; color: #5a2d82;">Student Name</div>
+                <div id="student-balance" style="font-size: 0.9rem; color: var(--text-muted);">Balance: ₹0.00</div>
+            </div>
+            <div id="cart-summary-top" class="hidden">
+                <span id="items-count">0 Items</span> | <b id="total-amount-top">₹0.00</b>
+            </div>
+        </header>
+
+        <main class="kiosk-main" id="stage-container">
+            <!-- Stages will be injected here -->
+        </main>
+
+        <!-- Bottom Actions (Cart) -->
+        <footer class="checkout-bar" id="checkout-bar">
+            <div>
+                <p style="color: var(--text-muted); font-size: 0.9rem;">Your Order</p>
+                <h2 id="footer-total">₹0.00</h2>
+            </div>
+            <button class="order-btn" style="padding: 15px 40px; font-size: 1.2rem;" onclick="KioskController.showSummary()">
+                Review Order <i class="fa fa-arrow-right"></i>
+            </button>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="script.js"></script>
+    <script>
+        /**
+         * Kiosk Controller - Handles Ordering Flow
+         */
+        const KioskController = {
+            stage: 'home',
+            cart: [],
+            selectedShop: null,
+            student: null,
+            timer: null,
+            timeLeft: 180, // 3 minutes
+
+            init() {
+                this.renderHome();
+            },
+
+            // --- STAGE RENDERERS ---
+
+            renderHome() {
+                this.stage = 'home';
+                this.cart = [];
+                this.selectedShop = null;
+                this.student = null;
+                document.getElementById('checkout-bar').style.display = 'none';
+                document.getElementById('cart-summary-top').classList.add('hidden');
+                document.getElementById('student-info').classList.add('hidden');
+                
+                const container = document.getElementById('stage-container');
+                container.innerHTML = `
+                    <div class="stage-home">
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 30px; margin-bottom: 40px;">
+                            <img src="college_logo.png" alt="Logo" style="height: 120px;">
+                            <img src="college_mascot.png" alt="Mascot" style="height: 150px;">
+                        </div>
+                        <h1 style="font-size: 3.5rem; font-weight: 800; margin-bottom: 10px; color: #5a2d82;">Welcome to REC</h1>
+                        <p style="font-size: 1.5rem; color: var(--text-muted); margin-bottom: 50px;">Order your favorite food & snacks instantly</p>
+                        <button class="order-btn" onclick="KioskController.renderScanID()">ORDER NOW</button>
+                    </div>
+                `;
+            },
+
+            renderScanID() {
+                this.stage = 'scan';
+                const container = document.getElementById('stage-container');
+                container.innerHTML = `
+                    <div class="stage-home">
+                        <i class="fa fa-id-card" style="font-size: 5rem; color: #5a2d82; margin-bottom: 30px;"></i>
+                        <h2 style="font-size: 2.5rem; margin-bottom: 20px;">Please Scan Your ID</h2>
+                        <p style="color: var(--text-muted); margin-bottom: 40px;">Place your student card near the scanner to authenticate</p>
+                        
+                        <div class="simulation-box" style="background: #f8fafc; padding: 20px; border-radius: 15px; border: 2px dashed #cbd5e1;">
+                            <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 15px;">SIMULATION: Enter Student ID (Try S1001)</p>
+                            <input type="text" id="sim-id" value="S1001" style="padding: 10px; font-size: 1.2rem; border-radius: 8px; border: 1px solid #ddd; text-align: center; width: 150px;">
+                            <br><br>
+                            <button class="btn-primary" onclick="KioskController.loginStudent(document.getElementById('sim-id').value)">CONFIRM SCAN</button>
+                        </div>
+                        <br>
+                        <button class="btn-back" style="position: static;" onclick="KioskController.renderHome()">CANCEL</button>
+                    </div>
+                `;
+            },
+
+            loginStudent(studentId) {
+                const student = DataService.getById('students', studentId);
+                if (!student) {
+                    alert('Student not found. Please try again.');
+                    return;
+                }
+                if (student.status !== 'active') {
+                    alert('Student account is blocked.');
+                    return;
+                }
+                
+                this.student = student;
+                document.getElementById('student-info').classList.remove('hidden');
+                document.getElementById('student-name').textContent = student.name;
+                document.getElementById('student-balance').textContent = `Balance: ₹${student.balance.toFixed(2)}`;
+                
+                this.renderShops();
+            },
+
+            renderShops() {
+                this.stage = 'shops';
+                const vendors = DataService.getAll('vendors').filter(v => v.status === 'enabled');
+                const container = document.getElementById('stage-container');
+                
+                // Map images to vendors
+                const shopImages = {
+                    101: 'rec_cafe_image_1773156781463.png',
+                    102: 'rec_hut_image_1773156802786.png',
+                    103: 'rec_cafe_image_1773156781463.png',
+                    104: 'rec_mart_image_1773156628530.png',
+                    105: 'rec_cafe_image_1773156781463.png'
+                };
+
+                container.innerHTML = `
+                    <button class="btn-back" onclick="KioskController.renderScanID()"><i class="fa fa-arrow-left"></i> BACK</button>
+                    <h2 style="font-size: 2.5rem; margin-bottom: 30px; text-align: center;">Choose a Shop</h2>
+                    <div class="grid-shops" style="padding-bottom: 100px;">
+                        ${vendors.map(v => `
+                            <div class="card shop-card" onclick="KioskController.renderProducts(${v.id})">
+                                <img src="${shopImages[v.id] || 'rec_cafe_image_1773156781463.png'}" alt="${v.name}">
+                                <h3>${v.name}</h3>
+                                <p style="color: var(--text-muted); margin-top: 5px;">${v.joinDate ? 'Popular Choice' : 'Open Now'}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            },
+
+            renderProducts(vendorId) {
+                this.stage = 'products';
+                this.selectedShop = DataService.getById('vendors', vendorId);
+                const products = DataService.getAll('products').filter(p => p.vendorId === vendorId && p.active);
+                const container = document.getElementById('stage-container');
+                
+                container.innerHTML = `
+                    <button class="btn-back" onclick="KioskController.renderShops()"><i class="fa fa-arrow-left"></i> BACK</button>
+                    <div style="text-align: center; margin-bottom: 30px;">
+                        <h2 style="font-size: 2.5rem;">${this.selectedShop.name}</h2>
+                        <p style="color:var(--text-muted)">Select items to add to your cart</p>
+                    </div>
+                    <div class="grid-products" style="padding-bottom: 120px;">
+                        ${products.map(p => `
+                            <div class="card product-card">
+                                <div style="height: 180px; overflow: hidden; border-radius: 15px; margin-bottom: 15px;">
+                                    <img src="${p.image || 'media__1773155894023.png'}" alt="${p.name}" style="width: 100%; height: 100%; object-fit: cover;">
+                                </div>
+                                <h3 style="font-size: 1.2rem;">${p.name}</h3>
+                                <div class="product-price">₹${p.price.toFixed(2)}</div>
+                                <button class="add-btn" id="btn-${p.id}" onclick="KioskController.addToCart('${p.id}')">
+                                    ADD TO CART
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                this.updateUI();
+            },
+
+            addToCart(prodId) {
+                const product = DataService.getById('products', prodId);
+                this.cart.push(product);
+                
+                const btn = document.getElementById(`btn-${prodId}`);
+                btn.classList.add('active');
+                btn.innerHTML = 'ADDED <i class="fa fa-check"></i>';
+                
+                this.updateUI();
+            },
+
+            updateUI() {
+                const total = this.cart.reduce((sum, p) => sum + p.price, 0);
+                const checkoutBar = document.getElementById('checkout-bar');
+                const cartSummaryTop = document.getElementById('cart-summary-top');
+                
+                if (this.cart.length > 0) {
+                    checkoutBar.style.display = 'flex';
+                    cartSummaryTop.classList.remove('hidden');
+                    document.getElementById('items-count').textContent = `${this.cart.length} Items`;
+                    document.getElementById('total-amount-top').textContent = `₹${total.toFixed(2)}`;
+                    document.getElementById('footer-total').textContent = `₹${total.toFixed(2)}`;
+                }
+            },
+
+            showSummary() {
+                this.stage = 'summary';
+                const total = this.cart.reduce((sum, p) => sum + p.price, 0);
+                const container = document.getElementById('stage-container');
+                document.getElementById('checkout-bar').style.display = 'none';
+
+                container.innerHTML = `
+                    <button class="btn-back" onclick="KioskController.renderProducts(${this.selectedShop.id})"><i class="fa fa-arrow-left"></i> BACK</button>
+                    <div style="max-width: 600px; margin: 0 auto;">
+                        <h2 style="font-size: 2.5rem; margin-bottom: 30px; text-align: center;">Order Summary</h2>
+                        <div class="card" style="text-align: left; padding: 30px;">
+                            ${this.cart.map((p, idx) => `
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px;">
+                                    <span>${p.name}</span>
+                                    <b>₹${p.price.toFixed(2)}</b>
+                                </div>
+                            `).join('')}
+                            <div style="display: flex; justify-content: space-between; font-size: 1.5rem; font-weight: 800; margin-top: 20px;">
+                                <span>Grand Total</span>
+                                <span style="color: var(--primary);">₹${total.toFixed(2)}</span>
+                            </div>
+                        </div>
+                        <button class="order-btn" style="width: 100%; margin-top: 30px;" onclick="KioskController.startPayment()">PROCEED TO PAYMENT</button>
+                    </div>
+                `;
+            },
+
+            startPayment() {
+                this.stage = 'payment';
+                this.timeLeft = 180;
+                const total = this.cart.reduce((sum, p) => sum + p.price, 0);
+                const container = document.getElementById('stage-container');
+                
+                container.innerHTML = `
+                    <div class="payment-modal">
+                        <i class="fa fa-clock" style="font-size: 3rem; color: var(--danger);"></i>
+                        <h2 style="margin-top: 10px;">Complete Payment</h2>
+                        <p style="color: var(--text-muted)">Please pay within the next 3 minutes</p>
+                        <div class="timer" id="payment-timer">03:00</div>
+                        
+                        <div style="background: #f1f5f9; padding: 20px; border-radius: 12px; margin: 20px 0; text-align: left;">
+                            <div style="display: justify-content: space-between; margin-bottom: 5px;">
+                                <span>Paying as: <b>${this.student.name}</b></span>
+                            </div>
+                            <div style="display: justify-content: space-between;">
+                                <span>Payable Amount: <b style="color: var(--primary);">₹${total.toFixed(2)}</b></span>
+                            </div>
+                        </div>
+
+                        <div class="payment-options">
+                            <button class="payment-btn swift" onclick="KioskController.generateBill()">
+                                <i class="fa fa-wallet"></i> Pay via SWIFT Wallet
+                            </button>
+                            <button class="payment-btn" onclick="alert('Please scan the QR on the machine')">
+                                <i class="fa fa-qrcode"></i> UPI / Card Scan
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                this.timer = setInterval(() => {
+                    this.timeLeft--;
+                    const mins = Math.floor(this.timeLeft / 60);
+                    const secs = this.timeLeft % 60;
+                    document.getElementById('payment-timer').textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    
+                    if (this.timeLeft <= 0) {
+                        clearInterval(this.timer);
+                        alert('Session Expired!');
+                        this.renderHome();
+                    }
+                }, 1000);
+            },
+
+            generateBill() {
+                const total = this.cart.reduce((sum, p) => sum + p.price, 0);
+                
+                // Real-time balance check
+                if (this.student.balance < total) {
+                    alert('Insufficient SWIFT balance! Please top up or use another method.');
+                    return;
+                }
+
+                clearInterval(this.timer);
+                this.stage = 'bill';
+                const orderId = 'ORD-' + Math.floor(Math.random() * 1000000);
+                const container = document.getElementById('stage-container');
+                
+                // Deduct from student balance
+                const newBalance = this.student.balance - total;
+                DataService.update('students', this.student.id, { balance: newBalance });
+
+                // Update Persistence
+                this.cart.forEach(p => {
+                    const txn = {
+                        id: 'TXN-' + Date.now() + Math.floor(Math.random()*100),
+                        studentId: this.student.id,
+                        vendorId: p.vendorId,
+                        amount: p.price,
+                        date: new Date().toISOString(),
+                        status: 'completed',
+                        type: 'purchase',
+                        product: p.name,
+                        studentName: this.student.name // For easier reporting
+                    };
+                    DataService.add('transactions', txn);
+                    
+                    // Update vendor revenue
+                    const vendor = DataService.getById('vendors', p.vendorId);
+                    DataService.update('vendors', p.vendorId, { revenue: vendor.revenue + p.price });
+                });
+
+                container.innerHTML = `
+                    <div style="text-align: center; max-width: 500px; margin: 0 auto;">
+                        <div style="width: 100px; height: 100px; background: var(--success); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 3rem; margin: 0 auto 30px;">
+                            <i class="fa fa-check"></i>
+                        </div>
+                        <h1 style="font-size: 2.5rem; margin-bottom: 10px;">Order Successful!</h1>
+                        <p style="color: var(--text-muted); margin-bottom: 40px;">Your order has been placed successfully.</p>
+                        
+                        <div class="card" style="text-align: left; border: 2px dashed #e2e8f0; position: relative;">
+                            <div style="text-align: center; border-bottom: 2px dashed #f1f5f9; padding-bottom: 15px; margin-bottom: 15px;">
+                                <img src="college_logo.png" style="height: 40px; margin-bottom: 10px;">
+                                <h3 style="color: #5a2d82;">${this.selectedShop.name}</h3>
+                                <p style="font-size: 0.8rem; color: var(--text-muted);">${orderId}</p>
+                            </div>
+                            <div style="margin-bottom: 20px; font-size: 0.9rem;">
+                                <div>Student: <b>${this.student.name}</b></div>
+                                <div>ID: ${this.student.id}</div>
+                            </div>
+                            ${this.cart.map(p => `
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                                    <span>${p.name}</span>
+                                    <b>₹${p.price.toFixed(2)}</b>
+                                </div>
+                            `).join('')}
+                            <div style="display: flex; justify-content: space-between; font-size: 1.2rem; font-weight: 800; border-top: 1px solid #f1f5f9; pt-10; margin-top: 10px; padding-top: 10px;">
+                                <span>TOTAL</span>
+                                <span>₹${total.toFixed(2)}</span>
+                            </div>
+                            <div style="margin-top: 15px; font-size: 0.8rem; text-align: center; color: var(--text-muted);">
+                                Remaining SWIFT Balance: ₹${newBalance.toFixed(2)}
+                            </div>
+                        </div>
+
+                        <p style="margin-top: 30px; font-size: 0.9rem; color: var(--text-muted);">Please collect your items from the counter</p>
+                        <button class="order-btn" style="width: 100%; margin-top: 40px;" onclick="KioskController.renderHome()">DONE</button>
+                    </div>
+                `;
+            }
+        };
+
+        // Start Kiosk
+        DataService.init();
+        KioskController.init();
+    </script>
+</body>
+</html>

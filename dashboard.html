@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard | SWIFT Admin</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="dashboard-wrapper">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-logo">
+                <span class="icon">🚀</span>
+                <span>SWIFT</span>
+            </div>
+            <nav class="nav-menu" id="nav-menu">
+                <!-- Links injected dynamically -->
+            </nav>
+            <div class="sidebar-footer">
+                <div class="nav-link" id="logout-btn">
+                    <i class="fa fa-sign-out-alt"></i>
+                    <span>Logout</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Area -->
+        <main class="main-content">
+            <header class="navbar">
+                <div class="nav-left">
+                    <h2 id="page-title">Dashboard</h2>
+                </div>
+                <div class="nav-right">
+                    <button class="btn btn-icon btn-outline" id="theme-toggle">
+                        <i class="fa fa-moon"></i>
+                    </button>
+                    <div class="user-profile">
+                        <div class="avatar" id="user-avatar">?</div>
+                        <div class="user-info hide-mobile">
+                            <div style="font-weight: 600;" id="user-name">Loading...</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);" id="user-role">Role</div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dynamic Content Area -->
+            <div id="content-view">
+                <!-- View content injected here -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals Placeholder -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal-content" id="modal-content">
+            <!-- Modal body injected here -->
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="script.js"></script>
+    
+    <!-- Dashboard Core Logic -->
+    <script>
+        // Check Auth
+        if (!AuthService.isAuthenticated()) {
+            window.location.href = 'index.html';
+        }
+
+        const user = AuthService.getCurrentUser();
+        const navMenu = document.getElementById('nav-menu');
+        const contentView = document.getElementById('content-view');
+        const pageTitle = document.getElementById('page-title');
+
+        // Update User Profile UI
+        document.getElementById('user-avatar').textContent = user.avatar;
+        document.getElementById('user-name').textContent = user.name;
+        document.getElementById('user-role').textContent = user.role.replace('_', ' ').toUpperCase();
+
+        // Logout
+        document.getElementById('logout-btn').addEventListener('click', () => AuthService.logout());
+
+        // Theme Toggle
+        const themeBtn = document.getElementById('theme-toggle');
+        themeBtn.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            themeBtn.querySelector('i').className = newTheme === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
+            localStorage.setItem('swift_theme', newTheme);
+        });
+        if (localStorage.getItem('swift_theme') === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            themeBtn.querySelector('i').className = 'fa fa-sun';
+        }
+
+        // --- NAVIGATION & VIEWS ---
+        const VIEWS = {
+            super_admin: [
+                { id: 'dash', label: 'Dashboard', icon: 'fa-th-large' },
+                { id: 'students', label: 'Students', icon: 'fa-user-graduate' },
+                { id: 'vendors', label: 'Vendors', icon: 'fa-store' },
+                { id: 'transactions', label: 'Transactions', icon: 'fa-exchange-alt' },
+                { id: 'salesReport', label: 'Sales Report', icon: 'fa-chart-bar' },
+                { id: 'kiosk', label: 'Kiosk Portal', icon: 'fa-external-link-alt', url: 'kiosk.html' },
+                { id: 'settlement', label: 'Settlement', icon: 'fa-file-invoice-dollar' },
+                { id: 'analytics', label: 'Analytics', icon: 'fa-chart-pie' }
+            ],
+            vendor_admin: [
+                { id: 'dash', label: 'Dashboard', icon: 'fa-th-large' },
+                { id: 'products', label: 'Products', icon: 'fa-box' },
+                { id: 'transactions', label: 'Transactions', icon: 'fa-history' },
+                { id: 'analytics', label: 'Analytics', icon: 'fa-chart-line' },
+                { id: 'wallet', label: 'Wallet', icon: 'fa-wallet' }
+            ]
+        };
+
+        function renderNav() {
+            const roles = VIEWS[user.role];
+            navMenu.innerHTML = roles.map(item => `
+                <div class="nav-item">
+                    <a class="nav-link" data-view="${item.id}" onclick="switchView('${item.id}')">
+                        <i class="fa ${item.icon}"></i>
+                        <span>${item.label}</span>
+                    </a>
+                </div>
+            `).join('');
+            
+            // Set active class
+            document.querySelector('.nav-link').classList.add('active');
+        }
+
+        function switchView(viewId) {
+            const view = VIEWS[user.role].find(v => v.id === viewId);
+            if (view && view.url) {
+                window.location.href = view.url;
+                return;
+            }
+            // Update UI Sidebar
+            pageTitle.textContent = view.label;
+            
+            // Load View Logic
+            loadView(viewId);
+        }
+
+        function loadView(viewId) {
+            // This will call specific render functions from script.js logic (to be added)
+            contentView.innerHTML = `<div class="text-center mt-20"><i class="fa fa-spinner fa-spin"></i> Loading ${viewId}...</div>`;
+            
+            // Simulation
+            setTimeout(() => {
+                const renderFuncPre = user.role === 'super_admin' ? 'renderSuper' : 'renderVendor';
+                const funcName = renderFuncPre + viewId.charAt(0).toUpperCase() + viewId.slice(1);
+                
+                if (window[funcName]) {
+                    window[funcName]();
+                } else {
+                    contentView.innerHTML = `<h3>View ${viewId} coming soon...</h3>`;
+                }
+            }, 300);
+        }
+
+        // Initialize
+        renderNav();
+        switchView('dash');
+
+    </script>
+</body>
+</html>
